@@ -65,4 +65,6 @@ dependencies {
 
     // MediaPipe Face Landmarker
     implementation("com.google.mediapipe:tasks-vision:0.10.21")
+
+    implementation("androidx.camera:camera-compose:1.5.0") // проверьте актуальную версию
 }
