@@ -28,6 +28,9 @@ android {
             )
         }
     }
+
+
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -81,4 +84,27 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    implementation("com.headmon:libnative:3.2.9")
+    implementation("com.headmon:libuvc:3.2.9")
+    implementation("com.headmon:libuvccommon:3.2.9")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+
+
+    implementation("com.headmon:libausbc:3.3.4")
+    implementation("com.headmon:libnative:3.2.9")
+    implementation("com.headmon:libuvc:3.2.9")
+    implementation("com.headmon:libuvccommon:3.2.9")
+
+    implementation("com.headmon:libausbc:3.3.4")
+
+
+
+
+
+
+
+
+
 }

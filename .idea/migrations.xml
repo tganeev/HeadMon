@@ -4,6 +4,7 @@
     <option name="MigrateToGradleLocalJavaHome">
       <set>
         <option value="/opt/goinfre/kindlyfr/Projects/HeadMon" />
+        <option value="$PROJECT_DIR$" />
       </set>
     </option>
   </component>
