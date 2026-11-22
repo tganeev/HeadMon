@@ -66,17 +66,22 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.foundation:foundation") // Для LazyColumn
+    implementation("androidx.compose.foundation:foundation")
 
     // Lifecycle и Activity
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-    // Core
+    // Core/UI
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
 
-    // Тестирование (если нужно)
+    // UVC thermal camera (local AARs via app/libs/local Maven repo)
+    implementation("com.headmon:libausbc:3.3.4")
+
+    // Тестирование
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
@@ -84,27 +89,4 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    implementation("com.headmon:libnative:3.2.9")
-    implementation("com.headmon:libuvc:3.2.9")
-    implementation("com.headmon:libuvccommon:3.2.9")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-
-
-    implementation("com.headmon:libausbc:3.3.4")
-    implementation("com.headmon:libnative:3.2.9")
-    implementation("com.headmon:libuvc:3.2.9")
-    implementation("com.headmon:libuvccommon:3.2.9")
-
-    implementation("com.headmon:libausbc:3.3.4")
-
-
-
-
-
-
-
-
-
 }

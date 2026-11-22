@@ -15,12 +15,11 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
-        mavenCentral() // <-- Должен быть ДО jitpack
-        maven {  url = uri("${rootDir}/app/libs/local") } }
+        mavenCentral()
+        maven { url = uri("${rootDir}/app/libs/local") }
+        maven { url = uri("${rootDir}/local-maven") }
+    }
 }
 
 rootProject.name = "HeadMon"
 include(":app")
-
-
- 
