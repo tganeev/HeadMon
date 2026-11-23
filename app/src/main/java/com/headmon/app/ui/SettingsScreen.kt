@@ -23,6 +23,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     var soundEnabled by remember { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
     var detectionMode by remember { mutableStateOf(prefs.getString("detection_mode", "BOTH") ?: "BOTH") }
+    var inputSource by remember { mutableStateOf(prefs.getString("input_source", "CAMERA") ?: "CAMERA") }
     var deviationThreshold by remember { mutableStateOf(prefs.getFloat("deviation_threshold", 20f)) }
 
     // Состояние для проверки USB
@@ -66,59 +67,103 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // --- Секция: Модели ---
-            Text("Модель детекции", style = MaterialTheme.typography.titleMedium)
+            // --- Секция: Источник детекции ---
+            Text("Источник детекции", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { expanded = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val text = when (detectionMode) {
-                        "FACE" -> "Только лицо (Face Landmarker)"
-                        "POSE" -> "Только тело (Pose Landmarker)"
-                        else -> "Гибридный режим (Face + Pose)"
-                    }
-                    Text(text)
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Гибридный режим (Face + Pose)") },
-                        onClick = {
-                            detectionMode = "BOTH"
-                            prefs.edit().putString("detection_mode", "BOTH").apply()
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Только лицо (Face Landmarker)") },
-                        onClick = {
-                            detectionMode = "FACE"
-                            prefs.edit().putString("detection_mode", "FACE").apply()
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Только тело (Pose Landmarker)") },
-                        onClick = {
-                            detectionMode = "POSE"
-                            prefs.edit().putString("detection_mode", "POSE").apply()
-                            expanded = false
-                        }
-                    )
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = inputSource == "CAMERA",
+                    onClick = {
+                        inputSource = "CAMERA"
+                        prefs.edit().putString("input_source", "CAMERA").apply()
+                    },
+                    label = { Text("Камера") }
+                )
+                FilterChip(
+                    selected = inputSource == "THERMAL",
+                    onClick = {
+                        inputSource = "THERMAL"
+                        prefs.edit().putString("input_source", "THERMAL").apply()
+                    },
+                    label = { Text("Тепловизор") }
+                )
             }
 
             Text(
-                text = "Гибридный режим использует лицо для точных углов, а тело — для случаев, когда лицо не видно.",
+                text = if (inputSource == "THERMAL") {
+                    "Мониторинг будет использовать USB-тепловизор. Подключите его по OTG и разрешите доступ."
+                } else {
+                    "Мониторинг будет использовать встроенную камеру устройства."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
             )
+
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            if (inputSource == "CAMERA") {
+                // --- Секция: Модели ---
+                Text("Модель детекции", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val text = when (detectionMode) {
+                            "FACE" -> "Только лицо (Face Landmarker)"
+                            "POSE" -> "Только тело (Pose Landmarker)"
+                            else -> "Гибридный режим (Face + Pose)"
+                        }
+                        Text(text)
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Гибридный режим (Face + Pose)") },
+                            onClick = {
+                                detectionMode = "BOTH"
+                                prefs.edit().putString("detection_mode", "BOTH").apply()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Только лицо (Face Landmarker)") },
+                            onClick = {
+                                detectionMode = "FACE"
+                                prefs.edit().putString("detection_mode", "FACE").apply()
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Только тело (Pose Landmarker)") },
+                            onClick = {
+                                detectionMode = "POSE"
+                                prefs.edit().putString("detection_mode", "POSE").apply()
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Гибридный режим использует лицо для точных углов, а тело — для случаев, когда лицо не видно.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            } else {
+                Text(
+                    text = "Для тепловизора используется отдельный алгоритм: самое яркое тепловое пятно, FFC-фильтр и оценка смещения головы.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Divider(modifier = Modifier.padding(vertical = 16.dp))
 

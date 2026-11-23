@@ -3,8 +3,10 @@ package com.headmon.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.view.TextureView
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -22,6 +24,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -31,8 +36,13 @@ import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import com.headmon.app.data.AppDatabase
 import com.headmon.app.data.SessionLog
+import com.headmon.app.thermal.ThermalCameraController
+import com.headmon.app.thermal.ThermalHeadTrackingSource
+import com.headmon.app.thermal.ThermalTrackingEvent
 import com.headmon.app.util.AppLogger
 import com.headmon.app.util.PoseAnalyzer
+import com.jiangdg.ausbc.widget.AspectRatioTextureView
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -58,6 +68,7 @@ fun MonitoringScreen(
 
     val soundEnabled by remember { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
     val detectionMode by remember { mutableStateOf(prefs.getString("detection_mode", "BOTH") ?: "BOTH") }
+    val inputSource by remember { mutableStateOf(prefs.getString("input_source", "CAMERA") ?: "CAMERA") }
     // Читаем порог из настроек (по умолчанию 20)
     val deviationThreshold by remember { mutableStateOf(prefs.getFloat("deviation_threshold", 20f)) }
 
@@ -72,6 +83,8 @@ fun MonitoringScreen(
     var statusText by remember { mutableStateOf("Ожидание...") }
     var isDeviated by remember { mutableStateOf(false) }
     var isSoundPlaying by remember { mutableStateOf(false) }
+    var thermalConfidence by remember { mutableStateOf<Float?>(null) }
+    var thermalOffset by remember { mutableStateOf<Pair<Float, Float>?>(null) }
 
     val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 100) }
     val currentMinuteLogs = remember { Collections.synchronizedList(mutableListOf<Float>()) }
@@ -82,11 +95,15 @@ fun MonitoringScreen(
     val angleHistory = remember { mutableStateListOf<Triple<Float, Float, Float>>() }
 
     LaunchedEffect(patientName) {
-        AppLogger.log("MONITOR", "Started monitoring for patient: $patientName. Mode: $detectionMode. Threshold: $deviationThreshold")
+        AppLogger.log(
+            "MONITOR",
+            "Started monitoring for patient: $patientName. Source: $inputSource. " +
+                "Mode: $detectionMode. Threshold: $deviationThreshold"
+        )
     }
 
-    LaunchedEffect(detectionMode) {
-        if (detectionMode == "POSE" || detectionMode == "BOTH") {
+    LaunchedEffect(inputSource, detectionMode) {
+        if (inputSource == "CAMERA" && (detectionMode == "POSE" || detectionMode == "BOTH")) {
             PoseAnalyzer.init(context) { angle ->
                 currentPoseAngle = angle
             }
@@ -104,17 +121,23 @@ fun MonitoringScreen(
         }
     }
 
+    DisposableEffect(toneGenerator) {
+        onDispose { toneGenerator.release() }
+    }
+
     LaunchedEffect(currentAngles, currentPoseAngle, lastFaceSeenTime, baselineAngles, baselinePoseAngle, deviationThreshold) {
-        if (detectionMode == "FACE") {
-            if (currentAngles != null) statusText = "Лицо обнаружено"
-            else if (System.currentTimeMillis() - lastFaceSeenTime > 2000) statusText = "Лицо не обнаружено"
-        } else if (detectionMode == "POSE") {
-            if (currentPoseAngle != null) statusText = "Тело обнаружено"
-            else statusText = "Тело не обнаружено"
-        } else if (detectionMode == "BOTH") {
-            if (currentAngles != null) statusText = "Лицо обнаружено"
-            else if (currentPoseAngle != null) statusText = "Тело обнаружено (Pose)"
-            else statusText = "Лицо и тело не обнаружены"
+        if (inputSource == "CAMERA") {
+            if (detectionMode == "FACE") {
+                if (currentAngles != null) statusText = "Лицо обнаружено"
+                else if (System.currentTimeMillis() - lastFaceSeenTime > 2000) statusText = "Лицо не обнаружено"
+            } else if (detectionMode == "POSE") {
+                if (currentPoseAngle != null) statusText = "Тело обнаружено"
+                else statusText = "Тело не обнаружено"
+            } else if (detectionMode == "BOTH") {
+                if (currentAngles != null) statusText = "Лицо обнаружено"
+                else if (currentPoseAngle != null) statusText = "Тело обнаружено (Pose)"
+                else statusText = "Лицо и тело не обнаружены"
+            }
         }
 
         val now = System.currentTimeMillis()
@@ -149,7 +172,8 @@ fun MonitoringScreen(
         }
 
         // Проверка Pose
-        val shouldCheckPose = (detectionMode == "POSE") || (detectionMode == "BOTH" && currentAngles == null)
+        val shouldCheckPose = inputSource == "CAMERA" &&
+            ((detectionMode == "POSE") || (detectionMode == "BOTH" && currentAngles == null))
         if (shouldCheckPose && currentPoseAngle != null && baselinePoseAngle != null) {
             val deltaPose = calculateAngleDelta(currentPoseAngle!!, baselinePoseAngle!!)
 
@@ -172,12 +196,25 @@ fun MonitoringScreen(
             }
             currentMinuteLogs.add(deltaPose)
         }
+
+        if (inputSource == "THERMAL" && currentAngles == null && currentPoseAngle == null &&
+            System.currentTimeMillis() - lastFaceSeenTime > 2000
+        ) {
+            if (deviationStartTime != 0L) {
+                isDeviated = false
+                deviationStartTime = 0L
+            }
+            if (isSoundPlaying) {
+                isSoundPlaying = false
+                AppLogger.log("ALERT", "Thermal deviation returned to normal.")
+            }
+        }
     }
 
     val executor = remember { Executors.newSingleThreadExecutor() }
 
-    val landmarker = remember(detectionMode) {
-        if (detectionMode == "POSE") return@remember null
+    val landmarker = remember(inputSource, detectionMode) {
+        if (inputSource != "CAMERA" || detectionMode == "POSE") return@remember null
 
         val baseOptions = BaseOptions.builder()
             .setModelAssetPath("face_landmarker.task")
@@ -232,11 +269,108 @@ fun MonitoringScreen(
         FaceLandmarker.createFromOptions(context, options)
     }
 
+    DisposableEffect(landmarker) {
+        onDispose { landmarker?.close() }
+    }
+
+    val thermalPreviewView = remember { AspectRatioTextureView(context) }
+    var thermalSurfaceReady by remember { mutableStateOf(false) }
+
+    fun handleThermalEvent(event: ThermalTrackingEvent) {
+        when (event) {
+            is ThermalTrackingEvent.CameraState -> statusText = formatThermalCameraState(event)
+            is ThermalTrackingEvent.Device -> statusText = if (event.name == null) {
+                "Тепловизор не найден. Подключите устройство по OTG."
+            } else {
+                "Тепловизор: ${event.name}"
+            }
+
+            is ThermalTrackingEvent.Pose -> {
+                statusText = "Голова обнаружена (тепловизор)"
+                if (event.pose.yaw != null || event.pose.pitch != null || event.pose.roll != null) {
+                    currentAngles = Triple(event.pose.yaw ?: 0f, event.pose.pitch ?: 0f, event.pose.roll ?: 0f)
+                }
+                thermalConfidence = event.metrics.confidence
+                thermalOffset = event.pose.dx?.let { dx ->
+                    event.pose.dy?.let { dy -> Pair(dx, dy) }
+                }
+                lastFaceSeenTime = System.currentTimeMillis()
+                if (faceStableTime == 0L) faceStableTime = lastFaceSeenTime
+            }
+
+            ThermalTrackingEvent.NoHead -> {
+                statusText = "Голова не обнаружена"
+                currentAngles = null
+                thermalConfidence = null
+                thermalOffset = null
+                lastFaceSeenTime = System.currentTimeMillis()
+                faceStableTime = 0L
+            }
+
+            ThermalTrackingEvent.Ffc -> statusText = "FFC: стабилизация..."
+            is ThermalTrackingEvent.Error -> statusText = "Ошибка: ${event.message}"
+        }
+    }
+
+    val thermalSource = remember(inputSource) {
+        if (inputSource != "THERMAL") {
+            null
+        } else {
+            ThermalHeadTrackingSource(
+                context = context,
+                previewView = thermalPreviewView,
+                onEvent = { event -> handleThermalEvent(event) }
+            )
+        }
+    }
+
+    DisposableEffect(thermalSource) {
+        val source = thermalSource
+        onDispose { source?.release() }
+    }
+
+    LaunchedEffect(thermalSource, thermalSurfaceReady, lifecycleOwner) {
+        if (thermalSource == null) return@LaunchedEffect
+        val lifecycle = lifecycleOwner.lifecycle
+        fun startIfReady() {
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && thermalSurfaceReady) {
+                thermalSource.start()
+            }
+        }
+        val observer = object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> startIfReady()
+                    Lifecycle.Event.ON_PAUSE -> thermalSource.stop()
+                    else -> Unit
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        startIfReady()
+        try {
+            awaitCancellation()
+        } finally {
+            lifecycle.removeObserver(observer)
+            thermalSource.stop()
+        }
+    }
+
     val previewView = remember { PreviewView(context) }
-    LaunchedEffect(isFrontCamera, detectionMode) {
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    LaunchedEffect(inputSource, isFrontCamera, detectionMode) {
+        if (inputSource != "CAMERA") {
+            cameraProvider?.unbindAll()
+            return@LaunchedEffect
+        }
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
+            val provider = cameraProviderFuture.get()
+            provider.unbindAll()
+            cameraProvider = provider
+
             val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -266,13 +400,16 @@ fun MonitoringScreen(
 
             val cameraSelector = if (isFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
             try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
+                provider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
                 AppLogger.log("CAMERA", "Camera bound: ${if (isFrontCamera) "FRONT" else "BACK"}")
             } catch (e: Exception) {
                 AppLogger.log("CAMERA", "Bind failed: ${e.message}")
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { cameraProvider?.unbindAll() }
     }
 
     LaunchedEffect(baselineAngles, baselinePoseAngle) {
@@ -311,7 +448,44 @@ fun MonitoringScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+        if (inputSource == "THERMAL") {
+            AndroidView(
+                factory = {
+                    thermalPreviewView.apply {
+                        surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                            override fun onSurfaceTextureAvailable(
+                                surface: SurfaceTexture,
+                                width: Int,
+                                height: Int
+                            ) {
+                                thermalSurfaceReady = true
+                                thermalSource?.start()
+                            }
+
+                            override fun onSurfaceTextureSizeChanged(
+                                surface: SurfaceTexture,
+                                width: Int,
+                                height: Int
+                            ) = Unit
+
+                            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                                thermalSurfaceReady = false
+                                thermalSource?.stop()
+                                return true
+                            }
+
+                            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f)
+                    .align(Alignment.Center)
+            )
+        } else {
+            AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+        }
 
         if (baselineAngles != null || baselinePoseAngle != null) {
             Box(modifier = Modifier.fillMaxSize().background(if (isDeviated) Color.Red.copy(alpha = 0.3f) else Color.Green.copy(alpha = 0.1f)))
@@ -320,13 +494,24 @@ fun MonitoringScreen(
         Card(modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)) {
             Column(Modifier.padding(12.dp)) {
                 Text("Пациент: $patientName", style = MaterialTheme.typography.titleMedium)
-                Text("Режим: $detectionMode, Порог: ${deviationThreshold.toInt()}°", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                val sourceLabel = if (inputSource == "THERMAL") "Тепловизор" else "Камера (${detectionMode})"
+                Text("Источник: $sourceLabel, Порог: ${deviationThreshold.toInt()}°", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 Text(statusText)
                 currentAngles?.let { (yaw, pitch, roll) ->
                     Spacer(Modifier.height(8.dp))
                     Text("Yaw: %.1f°".format(yaw))
                     Text("Pitch: %.1f°".format(pitch))
                     Text("Roll: %.1f°".format(roll))
+                }
+                if (inputSource == "THERMAL") {
+                    thermalConfidence?.let { confidence ->
+                        Spacer(Modifier.height(4.dp))
+                        Text("Confidence: %.2f".format(confidence), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                    thermalOffset?.let { (dx, dy) ->
+                        Spacer(Modifier.height(4.dp))
+                        Text("DX: %.3f  DY: %.3f".format(dx, dy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    }
                 }
                 currentPoseAngle?.let { angle ->
                     Spacer(Modifier.height(8.dp))
@@ -377,9 +562,11 @@ fun MonitoringScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Сбросить калибровку") }
             }
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { isFrontCamera = !isFrontCamera }) {
-                Text(if (isFrontCamera) "Задняя камера" else "Передняя камера")
+            if (inputSource == "CAMERA") {
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { isFrontCamera = !isFrontCamera }) {
+                    Text(if (isFrontCamera) "Задняя камера" else "Передняя камера")
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -432,4 +619,16 @@ fun matrixToEulerAngles(m: FloatArray): Triple<Float, Float, Float> {
     val yaw = atan2(m10, m00) * 180f / Math.PI.toFloat()
     val roll = atan2(m21, m22) * 180f / Math.PI.toFloat()
     return Triple(yaw, pitch, roll)
+}
+private fun formatThermalCameraState(event: ThermalTrackingEvent.CameraState): String {
+    return when (event.state) {
+        ThermalCameraController.State.IDLE -> "Ожидание..."
+        ThermalCameraController.State.WAITING_FOR_DEVICE -> "Поиск тепловизора..."
+        ThermalCameraController.State.REQUESTING_PERMISSION -> "Запрос доступа к USB..."
+        ThermalCameraController.State.OPENING -> "Открытие тепловизора..."
+        ThermalCameraController.State.STREAMING ->
+            "Тепловизор работает${event.message?.let { ": $it" } ?: ""}"
+        ThermalCameraController.State.STOPPED -> "Тепловизор остановлен"
+        ThermalCameraController.State.ERROR -> "Ошибка: ${event.message ?: "неизвестная"}"
+    }
 }
