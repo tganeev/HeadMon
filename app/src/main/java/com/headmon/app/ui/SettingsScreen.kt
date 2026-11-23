@@ -153,8 +153,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Открыть превью тепловизора")
+                Text("Открыть превью и анализ тепловизора")
             }
+            Text(
+                text = "MVP: детекция самого яркого теплового пятна, FFC-фильтр и метрики положения.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
 
             Button(
                 onClick = {
