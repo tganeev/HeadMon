@@ -74,7 +74,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Показывать табло углов положения головы", style = MaterialTheme.typography.bodyLarge)
+                Text("Отображать координаты", style = MaterialTheme.typography.bodyLarge)
                 Switch(
                     checked = showPoseCard,
                     onCheckedChange = {

@@ -8,8 +8,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,8 +48,8 @@ fun AppNavigation() {
     val context = LocalContext.current
     val db = remember { AppDatabase.getDatabase(context) }
 
-    var currentScreen by remember { mutableStateOf(Screen.MENU) }
-    var currentPatientName by remember { mutableStateOf("") }
+    var currentScreen by rememberSaveable { mutableStateOf(Screen.MENU) }
+    var currentPatientName by rememberSaveable { mutableStateOf("") }
     var showNameDialog by remember { mutableStateOf(false) }
     var inputName by remember { mutableStateOf("") }
 
@@ -67,9 +70,9 @@ fun AppNavigation() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("HeadMon", style = MaterialTheme.typography.displayMedium)
                 Spacer(modifier = Modifier.height(48.dp))
