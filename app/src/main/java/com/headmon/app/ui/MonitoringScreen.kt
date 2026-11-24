@@ -69,6 +69,7 @@ fun MonitoringScreen(
     val soundEnabled by remember { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
     val detectionMode by remember { mutableStateOf(prefs.getString("detection_mode", "BOTH") ?: "BOTH") }
     val inputSource by remember { mutableStateOf(prefs.getString("input_source", "CAMERA") ?: "CAMERA") }
+    val showPoseCard by remember { mutableStateOf(prefs.getBoolean("show_pose_card", false)) }
     // Читаем порог из настроек (по умолчанию 20)
     val deviationThreshold by remember { mutableStateOf(prefs.getFloat("deviation_threshold", 20f)) }
 
@@ -491,38 +492,40 @@ fun MonitoringScreen(
             Box(modifier = Modifier.fillMaxSize().background(if (isDeviated) Color.Red.copy(alpha = 0.3f) else Color.Green.copy(alpha = 0.1f)))
         }
 
-        Card(modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text("Пациент: $patientName", style = MaterialTheme.typography.titleMedium)
-                val sourceLabel = if (inputSource == "THERMAL") "Тепловизор" else "Камера (${detectionMode})"
-                Text("Источник: $sourceLabel, Порог: ${deviationThreshold.toInt()}°", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                Text(statusText)
-                currentAngles?.let { (yaw, pitch, roll) ->
-                    Spacer(Modifier.height(8.dp))
-                    Text("Yaw: %.1f°".format(yaw))
-                    Text("Pitch: %.1f°".format(pitch))
-                    Text("Roll: %.1f°".format(roll))
-                }
-                if (inputSource == "THERMAL") {
-                    thermalConfidence?.let { confidence ->
-                        Spacer(Modifier.height(4.dp))
-                        Text("Confidence: %.2f".format(confidence), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        if (showPoseCard) {
+            Card(modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Пациент: $patientName", style = MaterialTheme.typography.titleMedium)
+                    val sourceLabel = if (inputSource == "THERMAL") "Тепловизор" else "Камера (${detectionMode})"
+                    Text("Источник: $sourceLabel, Порог: ${deviationThreshold.toInt()}°", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    Text(statusText)
+                    currentAngles?.let { (yaw, pitch, roll) ->
+                        Spacer(Modifier.height(8.dp))
+                        Text("Yaw: %.1f°".format(yaw))
+                        Text("Pitch: %.1f°".format(pitch))
+                        Text("Roll: %.1f°".format(roll))
                     }
-                    thermalOffset?.let { (dx, dy) ->
-                        Spacer(Modifier.height(4.dp))
-                        Text("DX: %.3f  DY: %.3f".format(dx, dy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    if (inputSource == "THERMAL") {
+                        thermalConfidence?.let { confidence ->
+                            Spacer(Modifier.height(4.dp))
+                            Text("Confidence: %.2f".format(confidence), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                        }
+                        thermalOffset?.let { (dx, dy) ->
+                            Spacer(Modifier.height(4.dp))
+                            Text("DX: %.3f  DY: %.3f".format(dx, dy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
-                }
-                currentPoseAngle?.let { angle ->
-                    Spacer(Modifier.height(8.dp))
-                    Text("Pose: %.1f°".format(angle), color = MaterialTheme.colorScheme.secondary)
-                }
-                if (baselineAngles != null || baselinePoseAngle != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = if (isDeviated) "ОТКЛОНЕНИЕ!" else "Положение в норме",
-                        color = if (isDeviated) Color.Red else Color(0xFF388E3C)
-                    )
+                    currentPoseAngle?.let { angle ->
+                        Spacer(Modifier.height(8.dp))
+                        Text("Pose: %.1f°".format(angle), color = MaterialTheme.colorScheme.secondary)
+                    }
+                    if (baselineAngles != null || baselinePoseAngle != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = if (isDeviated) "ОТКЛОНЕНИЕ!" else "Положение в норме",
+                            color = if (isDeviated) Color.Red else Color(0xFF388E3C)
+                        )
+                    }
                 }
             }
         }

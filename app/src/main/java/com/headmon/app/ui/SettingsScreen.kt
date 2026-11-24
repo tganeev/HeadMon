@@ -22,6 +22,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val prefs = remember { context.getSharedPreferences("headmon_prefs", Context.MODE_PRIVATE) }
 
     var soundEnabled by remember { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
+    var showPoseCard by remember { mutableStateOf(prefs.getBoolean("show_pose_card", false)) }
     var detectionMode by remember { mutableStateOf(prefs.getString("detection_mode", "BOTH") ?: "BOTH") }
     var inputSource by remember { mutableStateOf(prefs.getString("input_source", "CAMERA") ?: "CAMERA") }
     var deviationThreshold by remember { mutableStateOf(prefs.getFloat("deviation_threshold", 20f)) }
@@ -61,6 +62,24 @@ fun SettingsScreen(onBack: () -> Unit) {
                     onCheckedChange = {
                         soundEnabled = it
                         prefs.edit().putBoolean("sound_enabled", it).apply()
+                    }
+                )
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // --- Секция: Отображение табло углов ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Показывать табло углов положения головы", style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = showPoseCard,
+                    onCheckedChange = {
+                        showPoseCard = it
+                        prefs.edit().putBoolean("show_pose_card", it).apply()
                     }
                 )
             }
